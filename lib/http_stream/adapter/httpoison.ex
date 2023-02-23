@@ -11,6 +11,10 @@ if Code.ensure_loaded?(HTTPoison) do
     ```
     """
 
+    defmodule Error do
+      defstruct [:id, :status_code]
+    end
+
     alias HTTPStream.Request
 
     @behaviour HTTPStream.Adapter
@@ -43,6 +47,13 @@ if Code.ensure_loaded?(HTTPoison) do
         %HTTPoison.AsyncEnd{id: ^id} ->
           {:halt, response}
 
+        %HTTPoison.AsyncStatus{code: status_code} ->
+          if status_code == 200 do
+            HTTPoison.stream_next(response)
+            {[], response}
+          else
+            {:halt, %Error{id: id, status_code: status_code}}
+          end
         _ ->
           HTTPoison.stream_next(response)
           {[], response}
@@ -56,6 +67,11 @@ if Code.ensure_loaded?(HTTPoison) do
     @impl true
     def close(%HTTPoison.AsyncResponse{id: id}) do
       :hackney.stop_async(id)
+    end
+
+    def close(error = %Error{id: id}) do
+      :hackney.stop_async(id)
+      throw error
     end
 
     defp timeout do
